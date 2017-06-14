@@ -6,9 +6,17 @@ import time
 import schedule
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 def init_driver():
-    driver = webdriver.Firefox()
+    capabilities = webdriver.DesiredCapabilities().FIREFOX
+    capabilities["marionette"] = False
+    binary = FirefoxBinary(r'/usr/bin/firefox')
+    driver = webdriver.Firefox(firefox_binary=binary, capabilities=capabilities)
+    #binary = FirefoxBinary('/usr/lib/firefox/firefox')
+    #driver = webdriver.Firefox(firefox_binary=binary)
+    # driver = webdriver.Firefox()
     driver.wait = WebDriverWait(driver, 5)
     return driver
 def istag(tag, foo):
@@ -18,6 +26,7 @@ def istag(tag, foo):
         result = False
     return result
 def find_brs(size):
+    #this method finds the number of bathrooms
     split = size.strip('/- ').split(' - ')
     if len(split) == 2:
         n_brs = split[0].replace('br', '')
@@ -36,15 +45,10 @@ def find_brs(size):
 def scrapeit():
     driver = init_driver()
     start = time.time()
-    page = 0;
     string = "?s="
     url4 = 'http://boston.craigslist.org/search/jjj'
     url_base = 'http://boston.craigslist.org/search/hhh'
-    url2 = 'http://boston.craigslist.org'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-
-    conn = sqlite3.connect('housingthing.db')
+    conn = sqlite3.connect('/home/ubuntu/Documents/scraper/housingthing.db')
     c = conn.cursor()
     x = 0
     count = 0
@@ -58,6 +62,7 @@ def scrapeit():
                     driver.get(url_base)
                     done = 1
                 except:
+                    #if the page hasn't loaded yet, it waits 20 seonds and tries again
                     time.sleep(20)
         else:
             newurl = url_base+ string+ str(page)
@@ -67,17 +72,16 @@ def scrapeit():
                     driver.get(newurl)
                     done = 1
                 except:
+                    #see previous comment
                     time.sleep(20)
-        pageno=0
 
         apts = driver.find_elements_by_class_name('result-info')
-        #gotten this far so far
         i = 0
         while i < len(apts):
             skip = 0
             print ("apt number " + str(i))
-            this_appt = apts[i]
             try:
+                #finding the neighborhood
                 hood = driver.find_elements_by_class_name('result-hood')[i].text
             except IndexError:
                 hood = "None"
@@ -94,23 +98,26 @@ def scrapeit():
                     done = 1
                 except:
                     time.sleep(20)
-            #gotten to here
             try:
+                #finding the latitude and longitude
                 lata = driver.find_elements_by_class_name('viewposting')[0]
                 lat = lata.get_attribute('data-latitude')
-                long = lata.get_attribute('data-longitude')
+                lng = lata.get_attribute('data-longitude')
                 print(lat)
-                print(long)
+                print(lng)
             except IndexError:
                 lat = 0
-                long = 0
+                lng = 0
             timea = driver.find_elements_by_class_name('timeago')
             try:
                 timeb = timea[0].get_attribute('datetime')
+                #finding when the entry was posted
             except:
                timeb = "Unknown"
             try:
-                title = driver.find_element_by_tag_name('title').text
+                #finding the page title
+                title = driver.find_element_by_id('titletextonly').text
+                print("title is, ",title)
             except AttributeError:
                 title = "error, can't find title"
             try:
@@ -124,6 +131,7 @@ def scrapeit():
                skip = 1
             #print(html2.prettify())
             try:
+                #finding the various tags
                 foo = driver.find_elements_by_class_name('attrgroup')[1].text
                 #print(foo)
                 cats = istag("cats", foo)
@@ -208,9 +216,10 @@ def scrapeit():
             #print(time)
             #print(hood)
             if (skip == 0):
-                print(str(datetime.datetime.now().time()))
-                values = (title, price, bedrooms, lat, long, timeb, hood, cats, dogs, wheelchair, nosmoke, privroom, privbath, furnished,  park, house, washer)
+                print(title)
+                values = (title, price, bedrooms, lat, lng, timeb, hood, cats, dogs, wheelchair, nosmoke, privroom, privbath, furnished,  park, house, washer)
                 try:
+                    #submitting it to SQL
                     c.execute("INSERT INTO housing (Source, Title, Price, Bedrooms, Lat, Long, Time, Hood, cats, dogs, wheelchair, nosmoke, privateroom, privatebath, furnished, parking, house, washer) VALUES ('Craigslist',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", values)
                     x=0
 
@@ -277,13 +286,13 @@ def scrapeit():
             try:
                 lata = driver.find_elements_by_class_name('viewposting')[0]
                 lat = lata.get_attribute('data-latitude')
-                long = lata.get_attribute('data-longitude')
+                lng = lata.get_attribute('data-longitude')
             except IndexError:
                 lat = 0
-                long = 0
+                lng = 0
 
             try:
-                title = driver.find_element_by_tag_name('title').text
+                title = driver.find_element_by_id('titletextonly').text
                 print(title)
             except AttributeError:
                 title = "error, can't find title"
@@ -314,7 +323,7 @@ def scrapeit():
                 timeb = "Unknown"
             if (skip == 0):
                 print(str(datetime.datetime.now().time()))
-                values = (title, lat, long, jobtype, hood, timeb, compensation)
+                values = (title, lat, lng, jobtype, hood, timeb, compensation)
                 try:
                     c.execute("INSERT INTO jobs (Source, Title, lat, long, type, Hood, Time, pay) VALUES ('Craigslist',?,?,?,?,?,?,?)", values)
 
@@ -326,6 +335,8 @@ def scrapeit():
             #x=101
             driver.execute_script("window.history.go(-1)")
         page = page+100
+
+#this code is for scheduling the program to run at specific intervals, in case the server doesn't do that.
 #schedule.every().day.at("22:01").do(scrapeit)
 
 #while True:
